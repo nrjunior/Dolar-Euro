@@ -25,8 +25,9 @@ final class EuroAction
 
     public function __invoke(Request $request, Response $response, $args)
     {
+        $cache_name = (string)S::create(substr(__CLASS__, 11, -6))->toLowerCase();
         FileSystemCache::$cacheDir = __DIR__ . '/../../../cache/tmp';
-        $key = FileSystemCache::generateCacheKey('cache-feed_EuroAction', null);
+        $key = FileSystemCache::generateCacheKey('cache-' . $cache_name, null);
         $data = FileSystemCache::retrieve($key);
 
         if($data === false)
@@ -42,10 +43,14 @@ final class EuroAction
             $doc->find('footer')->remove();
 
             $html = pq('body');
-            
+
             $data = array(
-                'info' => $this->processInfo($html),
-                'quotation' =>$this->processQuotation($html),
+                'quotation' => $this->processQuotation($html),
+                'info' => array(
+                    'title' => 'Euro',
+                    'createdat' => Carbon::now('America/Sao_Paulo')->toDateTimeString()
+                ),
+                'publishedat' => $this->processInfo($html),
             );
 
             FileSystemCache::store($key, $data, 1800);
@@ -65,13 +70,11 @@ final class EuroAction
 
         $date_published = $doc['section.mod-cotacoes:eq(0) caption.titulo span:eq(0)']->text();
         $hour = str_replace('h', ':', substr($date_published, -5)) . ':00';
-        $date = implode('-',array_reverse(explode('/',substr($date_published, 0, 10))));
+        $date = implode('-', array_reverse(explode('/',substr($date_published, 0, 10))));
 
-        return array(
-            'title' => (string) S::create('Euro')->toUpperCase(),
-            'createdat'=> Carbon::now('America/Sao_Paulo')->toDateTimeString(),
-            'publishedat' => $date . " " . $hour
-        );
+        $date_hour = strtotime($date . ' ' . $hour);
+
+        return 'Atualizado em ' . date('d/m', $date_hour) . ' ás ' . date('H:i', $date_hour) . 'h';
     }
 
     public function processQuotation($html)
@@ -81,8 +84,8 @@ final class EuroAction
 
         return array(
             'buy' => $doc['section.mod-cotacoes:eq(0) table tbody tr:eq(2) td:eq(1)' ]->text(),
-            'sell' =>$doc['section.mod-cotacoes:eq(0) table tbody tr:eq(2) td:eq(2)']->text(),
-            'variation' =>$doc['section.mod-cotacoes:eq(0) table tbody tr:eq(2) td:eq(3)']->text()
+            'sell' => $doc['section.mod-cotacoes:eq(0) table tbody tr:eq(2) td:eq(2)']->text(),
+            'variation' => str_replace(',', '.', substr(trim($doc['section.mod-cotacoes:eq(0) table tbody tr:eq(2) td:eq(3)']->text()), 0, -1))
         );
     }
 }
